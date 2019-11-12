@@ -13,6 +13,7 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import Common.LongFilePathOs as os
+import sys
 from sys import stdout
 from subprocess import PIPE,Popen
 from struct import Struct
@@ -160,7 +161,7 @@ class GenFdsGlobalVariable:
         "OUTPUT_DIR":os.path.join(BuildDir, "OUTPUT"),
         "DEBUG_DIR":os.path.join(BuildDir, "DEBUG")
         }
-        
+
         BuildRules = {}
         for Type in BuildRuleDatabase.FileTypeList:
             #first try getting build rule by BuildRuleFamily
@@ -486,7 +487,7 @@ class GenFdsGlobalVariable:
 
             SaveFileOnChange(CommandFile, ' '.join(Cmd), False)
             if IsMakefile:
-                if GlobalData.gGlobalDefines.get("FAMILY") == "MSFT":
+                if sys.platform == "win32":
                     Cmd = ['if', 'exist', Input[0]] + Cmd
                 else:
                     Cmd = ['-test', '-e', Input[0], "&&"] + Cmd

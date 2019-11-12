@@ -449,6 +449,7 @@ cleanlib:
         self.GenFfsList                 = ModuleAutoGen.GenFfsList
         self.MacroList = ['FFS_OUTPUT_DIR', 'MODULE_GUID', 'OUTPUT_DIR']
         self.FfsOutputFileList = []
+        self.DependencyHeaderFileSet = set()
 
     # Compose a dict object containing information used to do replacement in template
     @property
@@ -636,13 +637,11 @@ cleanlib:
         while not found and os.sep in package_rel_dir:
             index = package_rel_dir.index(os.sep)
             current_dir = mws.join(current_dir, package_rel_dir[:index])
-            try:
+            if os.path.exists(current_dir):
                 for fl in os.listdir(current_dir):
                     if fl.endswith('.dec'):
                         found = True
                         break
-            except:
-                EdkLogger.error('build', FILE_NOT_FOUND, "WORKSPACE does not exist.")
             package_rel_dir = package_rel_dir[index + 1:]
 
         MakefileTemplateDict = {
@@ -910,7 +909,7 @@ cleanlib:
                                     self._AutoGenObject.IncludePathList + self._AutoGenObject.BuildOptionIncPathList
                                     )
 
-        self.DependencyHeaderFileSet = set()
+
         if FileDependencyDict:
             for Dependency in FileDependencyDict.values():
                 self.DependencyHeaderFileSet.update(set(Dependency))
@@ -1081,13 +1080,17 @@ cleanlib:
                     else:
                         CmdCppDict[item.Target.SubDir] = ['$(MAKE_FILE)', Path]
                     if CppPath.Path in DependencyDict:
-                        for Temp in DependencyDict[CppPath.Path]:
-                            try:
-                                Path = self.PlaceMacro(Temp.Path, self.Macros)
-                            except:
-                                continue
-                            if Path not in (self.CommonFileDependency + CmdCppDict[item.Target.SubDir]):
-                                CmdCppDict[item.Target.SubDir].append(Path)
+                        if '$(FORCE_REBUILD)' in DependencyDict[CppPath.Path]:
+                            if '$(FORCE_REBUILD)' not in (self.CommonFileDependency + CmdCppDict[item.Target.SubDir]):
+                                CmdCppDict[item.Target.SubDir].append('$(FORCE_REBUILD)')
+                        else:
+                            for Temp in DependencyDict[CppPath.Path]:
+                                try:
+                                    Path = self.PlaceMacro(Temp.Path, self.Macros)
+                                except:
+                                    continue
+                                if Path not in (self.CommonFileDependency + CmdCppDict[item.Target.SubDir]):
+                                    CmdCppDict[item.Target.SubDir].append(Path)
         if T.Commands:
             CommandList = T.Commands[:]
             for Item in CommandList[:]:
@@ -1244,6 +1247,7 @@ ${BEGIN}\t-@${create_directory_command}\n${END}\
         BuildFile.__init__(self, ModuleAutoGen)
         self.PlatformInfo = self._AutoGenObject.PlatformInfo
         self.IntermediateDirectoryList = ["$(DEBUG_DIR)", "$(OUTPUT_DIR)"]
+        self.DependencyHeaderFileSet = set()
 
     # Compose a dict object containing information used to do replacement in template
     @property
@@ -1434,6 +1438,7 @@ cleanlib:
         self.ModuleBuildDirectoryList = []
         self.LibraryBuildDirectoryList = []
         self.LibraryMakeCommandList = []
+        self.DependencyHeaderFileSet = set()
 
     # Compose a dict object containing information used to do replacement in template
     @property
@@ -1539,6 +1544,7 @@ class TopLevelMakefile(BuildFile):
     def __init__(self, Workspace):
         BuildFile.__init__(self, Workspace)
         self.IntermediateDirectoryList = []
+        self.DependencyHeaderFileSet = set()
 
     # Compose a dict object containing information used to do replacement in template
     @property
