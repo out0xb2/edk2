@@ -13,33 +13,43 @@ from edk2toolext.invocables.edk2_platform_build import BuildSettingsManager
 from edk2toolext.invocables.edk2_setup import SetupSettingsManager, RequiredSubmodule
 from edk2toolext.invocables.edk2_update import UpdateSettingsManager
 
+
+class CommonPlatform():
+    PackagesSupported = ("OvmfPkg",)
+    ArchSupported = ("IA32", "X64")
+    TargetsSupported = ("DEBUG", "RELEASE", "NOOPT")
+    Scopes = ('ovmf', 'edk2-build')
+    WorkspaceRoot = os.path.realpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), ".."))
+
+
 #
-#==========================================================================
+# ==========================================================================
 # PLATFORM BUILD ENVIRONMENT CONFIGURATION
 #
-class SettingsManager(UpdateSettingsManager, SetupSettingsManager, BuildSettingsManager):
+class SettingsManager(UpdateSettingsManager, SetupSettingsManager):
     def __init__(self):
         pass
-   #self.ActualArchitectures = ["IA32"]   # default to IA32 if no architecture specified
+   # self.ActualArchitectures = ["IA32"]   # default to IA32 if no architecture specified
 
     def GetPackagesSupported(self):
         ''' return iterable of edk2 packages supported by this build.
         These should be edk2 workspace relative paths '''
-        return ("OvmfPkg",)
+        return CommonPlatform.PackagesSupported
 
     def GetArchitecturesSupported(self):
         ''' return iterable of edk2 architectures supported by this build '''
-        return ("IA32","X64","IA32 X64")
+        return CommonPlatform.ArchSupported
 
     def GetTargetsSupported(self):
         ''' return iterable of edk2 target tags supported by this build '''
-        return ("DEBUG", "RELEASE", "NOOPT")
+        return CommonPlatform.TargetsSupported
 
     def GetRequiredSubmodules(self):
         ''' return iterable containing RequiredSubmodule objects.
         If no RequiredSubmodules return an empty iterable
         '''
-        rs=[]
+        rs = []
         rs.append(RequiredSubmodule(
             "ArmPkg/Library/ArmSoftFloatLib/berkeley-softfloat-3", False))
         rs.append(RequiredSubmodule(
@@ -51,64 +61,110 @@ class SettingsManager(UpdateSettingsManager, SetupSettingsManager, BuildSettings
 
     def GetActiveScopes(self):
         ''' return tuple containing scopes that should be active for this process '''
-        return ('ovmf','edk2-build')
+        return CommonPlatform.Scopes
 
     def GetWorkspaceRoot(self):
         ''' get WorkspacePath '''
-        SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
-        return os.path.realpath(os.path.join(SCRIPT_PATH,".."))
+        return CommonPlatform.WorkspaceRoot
 
     def SetArchitectures(self, list_of_requested_architectures):
         ''' Confirm the requests architecture list is valid and configure SettingsManager
         to run only the requested architectures.
 
-        Raise Exception if either list_of_requested_architectures contains an unsupported 
-        architecture or more than 1 architecture specified
+        Raise Exception if a list_of_requested_architectures is not supported
         '''
-        supportedArchitectures = self.GetArchitecturesSupported()
-        if(len(list_of_requested_architectures) > 1):
-            errorString = (
-                "Exactly 1 architecture must be specified: " + ", ".join(supportedArchitectures ))
-            logging.critical( errorString )
-            raise Exception( errorString )
-
-        unsupported = set(list_of_requested_architectures) - set(supportedArchitectures)
+        unsupported = set(list_of_requested_architectures) - \
+            set(self.GetArchitecturesSupported())
         if(len(unsupported) > 0):
-            errorString = ( "Unsupported Architecture Requested: " + " ".join(unsupported))
-            logging.critical( errorString )
-            raise Exception( errorString )
+            logging.critical(
+                "Unsupported Architecture Requested: " + " ".join(unsupported))
+            raise Exception(
+                "Unsupported Architecture Requested: " + " ".join(unsupported))
+        self.ActualArchitectures = list_of_requested_architectures
 
-        # !!! HOWTO: recommended mechanism to pass to UefiBuilder ?
+    def SetTargets(self, list_of_requested_target):
+        ''' Confirm the request target list is valid and configure SettingsManager
+        to run only the requested targets.
 
-    # ####################################################################################### #
-    #                             Extra CmdLine configuration                                 #
-    # ####################################################################################### #
-
-    def AddCommandLineOptions(self, parserObj):
-        ''' Add command line options to the argparser '''
-        pass
-
-    def RetrieveCommandLineOptions(self, args):
-        '''  Retrieve command line options from the argparser '''
-        pass
-
+        Raise UnsupportedException if a requested_target is not supported
+        '''
+        unsupported = set(list_of_requested_target) - \
+            set(self.GetTargetsSupported())
+        if(len(unsupported) > 0):
+            logging.critical(
+                "Unsupported Targets Requested: " + " ".join(unsupported))
+            raise Exception("Unsupported Targets Requested: " +
+                            " ".join(unsupported))
+        self.ActualTargets = list_of_requested_target
 
     # ####################################################################################### #
     #                         Actual Configuration for Platform Build                         #
     # ####################################################################################### #
-class PlatformBuilder( UefiBuilder ):
+
+
+class PlatformBuilder(UefiBuilder, BuildSettingsManager):
+
+    def __init__(self):
+        UefiBuilder.__init__(self)
+
+    def AddCommandLineOptions(self, parserObj):
+        ''' Add command line options to the argparser '''
+        parserObj.add_argument('-a', "--arch", dest="build_arch", type=str, default="IA32,X64",
+                               help="Optional - CSV of architecutre to build.  IA32 will use IA32 for Pei & Dxe. "
+                                     "X64 will use X64 for both PEI and DXE.  IA32,X64 will use IA32 for PEI and "
+                                     "X64 for DXE. default is IA32,X64")
+        super().AddCommandLineOptions(parserObj)
+
+    def RetrieveCommandLineOptions(self, args):
+        '''  Retrieve command line options from the argparser '''
+        self.arch = args.build_arch.upper().split(",")
+        UefiBuilder.RetrieveCommandLineOptions(self, args)
+
+    def GetWorkspaceRoot(self):
+        ''' get WorkspacePath '''
+        return CommonPlatform.WorkspaceRoot
+
+    def GetPackagesPath(self):
+        ''' Return a list of workspace relative paths that should be mapped as edk2 PackagesPath '''
+        return ()
+    
+    def GetActiveScopes(self):
+        ''' return tuple containing scopes that should be active for this process '''
+        return CommonPlatform.Scopes
+
+    def GetName(self):
+        ''' Get the name of the repo, platform, or product being build '''
+        return "OvmfPkg.log"
+
+    def GetLoggingLevel(self, loggerType):
+        ''' Get the logging level for a given type
+        base == lowest logging level supported
+        con  == Screen logging
+        txt  == plain text file logging
+        md   == markdown file logging
+        '''
+        return logging.DEBUG
+
+
 
     def SetPlatformEnv(self):
         logging.debug("PlatformBuilder SetPlatformEnv")
 
-        self.env.SetValue("PRODUCT_NAME",    "OVMF",                    "Platform Hardcoded")
-        self.env.SetValue("ACTIVE_PLATFORM", "OvmfPkg/OvmfPkgIa32.dsc", "Platform Hardcoded")
-        self.env.SetValue("TARGET_ARCH",     "IA32",                    "Platform Hardcoded")
-        self.env.SetValue("TOOL_CHAIN_TAG",  "VS2017",                  "Default tool chain")
+        self.env.SetValue("PRODUCT_NAME",    "OVMF",
+                          "Platform Hardcoded")
+        self.env.SetValue("ACTIVE_PLATFORM",
+                          "OvmfPkg/OvmfPkgIa32.dsc", "Platform Hardcoded")
+        self.env.SetValue("TARGET_ARCH",     " ".join(self.arch),
+                          "From CmdLine")
+        self.env.SetValue("TOOL_CHAIN_TAG",  "VS2017",
+                          "Default tool chain")
 
-        self.env.SetValue("LaunchBuildLogProgram", "Notepad", "default - will fail if already set", True)
-        self.env.SetValue("LaunchLogOnSuccess",    "False",   "default - do not log when successful")
-        self.env.SetValue("LaunchLogOnError",      "True",    "default - will fail if already set", True)
+        self.env.SetValue("LaunchBuildLogProgram", "Notepad",
+                          "default - will fail if already set", True)
+        self.env.SetValue("LaunchLogOnSuccess",    "False",
+                          "default - do not log when successful")
+        self.env.SetValue("LaunchLogOnError",      "True",
+                          "default - will fail if already set", True)
 
         return 0
 
