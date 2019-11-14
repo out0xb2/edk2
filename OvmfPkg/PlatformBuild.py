@@ -71,6 +71,14 @@ class SettingsManager(UpdateSettingsManager, SetupSettingsManager):
             raise Exception( errorString )
         self.ActualArchitectures = list_of_requested_architectures
 
+    def GetWorkspaceRoot(self):
+        ''' get WorkspacePath '''
+        return CommonPlatform.WorkspaceRoot
+
+    def GetActiveScopes(self):
+        ''' return tuple containing scopes that should be active for this process '''
+        return CommonPlatform.Scopes
+
 
     # ####################################################################################### #
     #                         Actual Configuration for Platform Build                         #
