@@ -15,6 +15,9 @@ from edk2toolext.invocables.edk2_update import UpdateSettingsManager
 
 
 class CommonPlatform():
+    ''' Common settings for this platform.  Define static data here and use
+        for the different parts of stuart
+    '''
     PackagesSupported = ("OvmfPkg",)
     ArchSupported = ("IA32", "X64")
     TargetsSupported = ("DEBUG", "RELEASE", "NOOPT")
@@ -28,9 +31,6 @@ class CommonPlatform():
 # PLATFORM BUILD ENVIRONMENT CONFIGURATION
 #
 class SettingsManager(UpdateSettingsManager, SetupSettingsManager):
-    def __init__(self):
-        pass
-   # self.ActualArchitectures = ["IA32"]   # default to IA32 if no architecture specified
 
     def GetPackagesSupported(self):
         ''' return iterable of edk2 packages supported by this build.
@@ -55,9 +55,6 @@ class SettingsManager(UpdateSettingsManager, SetupSettingsManager):
         rs.append(RequiredSubmodule(
             "CryptoPkg/Library/OpensslLib/openssl", False))
         return rs
-
-    def GetPackagesPath(self):
-        return ()
 
     def GetActiveScopes(self):
         ''' return tuple containing scopes that should be active for this process '''
@@ -97,10 +94,6 @@ class SettingsManager(UpdateSettingsManager, SetupSettingsManager):
                             " ".join(unsupported))
         self.ActualTargets = list_of_requested_target
 
-    # ####################################################################################### #
-    #                         Actual Configuration for Platform Build                         #
-    # ####################################################################################### #
-
 
 class PlatformBuilder(UefiBuilder, BuildSettingsManager):
 
@@ -110,14 +103,24 @@ class PlatformBuilder(UefiBuilder, BuildSettingsManager):
     def AddCommandLineOptions(self, parserObj):
         ''' Add command line options to the argparser '''
         parserObj.add_argument('-a', "--arch", dest="build_arch", type=str, default="IA32,X64",
-                               help="Optional - CSV of architecutre to build.  IA32 will use IA32 for Pei & Dxe. "
-                                     "X64 will use X64 for both PEI and DXE.  IA32,X64 will use IA32 for PEI and "
-                                     "X64 for DXE. default is IA32,X64")
+                               help="Optional - CSV of architecutre to build.  IA32 will use IA32 for PEI & DXE. "
+                                     "X64 will use X64 for PEI and DXE.  IA32,X64 will use IA32 for PEI and "
+                                     "X64 for DXE. Default is IA32,X64")
         super().AddCommandLineOptions(parserObj)
 
     def RetrieveCommandLineOptions(self, args):
         '''  Retrieve command line options from the argparser '''
-        self.arch = args.build_arch.upper().split(",")
+
+        shell_environment.GetBuildVars().SetValue("TARGET_ARCH"," ".join(args.build_arch.upper().split(",")), "From CmdLine")
+        
+        dsc = "OvmfPkg"
+        if "IA32" in args.build_arch.upper().split(","):
+            dsc += "Ia32"
+        if "X64" in args.build_arch.upper().split(","):
+            dsc += "X64"
+        dsc += ".dsc"
+
+        shell_environment.GetBuildVars().SetValue("ACTIVE_PLATFORM", f"OvmfPkg/{dsc}", "From CmdLine")
         UefiBuilder.RetrieveCommandLineOptions(self, args)
 
     def GetWorkspaceRoot(self):
@@ -145,26 +148,12 @@ class PlatformBuilder(UefiBuilder, BuildSettingsManager):
         '''
         return logging.DEBUG
 
-
-
     def SetPlatformEnv(self):
         logging.debug("PlatformBuilder SetPlatformEnv")
 
-        self.env.SetValue("PRODUCT_NAME",    "OVMF",
-                          "Platform Hardcoded")
-        self.env.SetValue("ACTIVE_PLATFORM",
-                          "OvmfPkg/OvmfPkgIa32.dsc", "Platform Hardcoded")
-        self.env.SetValue("TARGET_ARCH",     " ".join(self.arch),
-                          "From CmdLine")
+        self.env.SetValue("PRODUCT_NAME", "OVMF", "Platform Hardcoded")        
         self.env.SetValue("TOOL_CHAIN_TAG",  "VS2017",
                           "Default tool chain")
-
-        self.env.SetValue("LaunchBuildLogProgram", "Notepad",
-                          "default - will fail if already set", True)
-        self.env.SetValue("LaunchLogOnSuccess",    "False",
-                          "default - do not log when successful")
-        self.env.SetValue("LaunchLogOnError",      "True",
-                          "default - will fail if already set", True)
 
         return 0
 
